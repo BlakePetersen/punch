@@ -1,0 +1,75 @@
+name: PunchSpike
+options:
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ${PUNCH_TEAM_ID}
+    ENABLE_HARDENED_RUNTIME: YES
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  PunchSpikeHost:
+    type: application
+    platform: macOS
+    sources: [PunchSpikeHost, Shared]
+    settings:
+      base:
+        PRODUCT_NAME: Punch Spike
+        PRODUCT_MODULE_NAME: PunchSpikeHost
+        PRODUCT_BUNDLE_IDENTIFIER: io.blakepetersen.punch.spike
+    info:
+      path: PunchSpikeHost/Info.plist
+      properties:
+        CFBundleDisplayName: Punch Spike
+        CFBundlePackageType: APPL
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSPrincipalClass: NSApplication
+        NSAudioCaptureUsageDescription: Punch Spike reacts to the audio playing on this Mac.
+    entitlements:
+      path: PunchSpikeHost/PunchSpikeHost.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+    dependencies:
+      - target: PunchSpikeSaver
+        embed: true
+  PunchSpikeSaver:
+    type: app-extension
+    platform: macOS
+    sources:
+      - PunchSpikeSaver
+      - Shared
+    settings:
+      base:
+        PRODUCT_NAME: PunchSpikeSaver
+        PRODUCT_BUNDLE_IDENTIFIER: io.blakepetersen.punch.spike.saver
+        SWIFT_OBJC_BRIDGING_HEADER: PunchSpikeSaver/PunchSpikeSaver-Bridging-Header.h
+        ENABLE_APP_SANDBOX: YES
+        SKIP_INSTALL: YES
+    info:
+      path: PunchSpikeSaver/Info.plist
+      properties:
+        CFBundleDisplayName: Punch Spike
+        CFBundlePackageType: XPC!
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSAudioCaptureUsageDescription: Punch Spike reacts to the audio playing on this Mac.
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.screensaver
+          NSExtensionPointVersion: "1.0"
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PunchSpikeSaverExtension
+        ScreenSaverViewControllerClass: $(PRODUCT_MODULE_NAME).PunchSpikeSaverViewController
+        SSEHasConfigureSheet: false
+        SSENeedsAnimationTimer: false
+    entitlements:
+      path: PunchSpikeSaver/PunchSpikeSaver.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.cs.disable-library-validation: true
+        com.apple.security.device.audio-input: true
+        com.apple.security.temporary-exception.mach-lookup.global-name:
+          - com.apple.CARenderServer
+          - com.apple.CoreDisplay.master
+          - com.apple.ViewBridgeAuxiliary
