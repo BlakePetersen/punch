@@ -1,0 +1,600 @@
+<title>Punch Fluid Studies</title>
+<!-- PROTOTYPE for wayfinder ticket #5. Four structurally different fluid engines on one page,
+     switchable via ?variant=A|B|C|D and the bottom pill. Driven by a synthetic beat clock (or the mic).
+     Throwaway: answers "what does Punch's fluid look like", then lives on a prototype branch only. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #07050A;
+    --ink: #F2E9E4;
+    --muted: #8E8395;
+    --punch: #E8324A;
+    --citrus: #FFB454;
+    --grenadine: #5A0E2E;
+    --plate: rgba(12, 8, 18, 0.55);
+    --display: "Syne", "Arial Black", Impact, sans-serif;
+    --text: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--text); font-size: 13px; line-height: 1.4;
+    overflow: hidden; -webkit-font-smoothing: antialiased;
+  }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--ground); }
+
+  .chrome { position: fixed; inset: 0; pointer-events: none; transition: opacity .25s ease; }
+  .chrome.hidden { opacity: 0; }
+  .chrome > * { pointer-events: auto; }
+
+  .name {
+    position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); top: max(16px, env(safe-area-inset-top, 0px));
+    max-width: min(46ch, calc(100vw - 32px)); text-shadow: 0 1px 12px rgba(7,5,10,.9);
+  }
+  .name h1 {
+    font-family: var(--display); font-weight: 800; font-size: clamp(28px, 5vw, 56px);
+    line-height: .95; letter-spacing: -0.01em; margin: 0; text-wrap: balance;
+  }
+  .name h1 span { color: var(--citrus); font-weight: 700; margin-right: .3em; }
+  .name p { margin: 8px 0 0; color: var(--ink); opacity: .82; max-width: 44ch; font-size: 14px; }
+  .name p em { font-style: normal; color: var(--citrus); }
+
+  .panel {
+    position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); top: max(16px, env(safe-area-inset-top, 0px));
+    width: min(300px, calc(100vw - 32px)); padding: 12px 14px 14px;
+    background: var(--plate); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 3px;
+    display: grid; gap: 10px;
+  }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button {
+    font: inherit; font-weight: 600; color: var(--ink); background: transparent;
+    border: 1px solid rgba(242,233,228,.28); border-radius: 3px; padding: 5px 10px; cursor: pointer;
+  }
+  button:hover { border-color: rgba(242,233,228,.6); }
+  button[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--citrus); outline-offset: 2px; }
+  .bpm { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .bpm output { color: var(--ink); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+  .knobs { display: grid; gap: 6px; }
+  .knob { display: grid; grid-template-columns: 9ch 1fr 4.5ch; align-items: center; gap: 8px; color: var(--muted); }
+  .knob output { color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
+  input[type=range] { width: 100%; accent-color: var(--citrus); margin: 0; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .hint kbd { font: inherit; color: var(--ink); }
+
+  .meter {
+    position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    display: grid; grid-template-columns: 5ch 96px 5ch; gap: 3px 8px; align-items: center;
+    font-variant-numeric: tabular-nums; text-shadow: 0 1px 8px rgba(7,5,10,.9);
+  }
+  .meter .lbl { color: var(--muted); }
+  .meter .bar { height: 6px; background: rgba(242,233,228,.14); border-radius: 1px; overflow: hidden; }
+  .meter .bar i { display: block; height: 100%; width: 0; background: var(--citrus); transition: width .04s linear; }
+  .meter .bar.onset i { background: var(--punch); }
+  .meter .val { color: var(--ink); text-align: right; }
+  .meter .src { grid-column: 1 / -1; color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  .switch {
+    position: absolute; left: 50%; bottom: max(16px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+    display: flex; align-items: center; gap: 4px; padding: 4px;
+    background: var(--citrus); color: #1A1006; border-radius: 999px; box-shadow: 0 6px 24px rgba(0,0,0,.45);
+    font-weight: 600; white-space: nowrap;
+  }
+  .switch button { color: inherit; border: 0; border-radius: 999px; padding: 6px 12px; font-weight: 700; }
+  .switch button:hover { background: rgba(0,0,0,.12); }
+  .switch .cur { padding: 0 6px; min-width: 14ch; text-align: center; }
+
+  .toast {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    padding: 14px 18px; background: var(--plate); backdrop-filter: blur(14px); border-radius: 3px; max-width: 40ch; text-align: center;
+  }
+  @media (max-width: 640px) {
+    .panel { width: calc(100vw - 32px); top: auto; bottom: 64px; right: 16px; left: 16px; }
+    .meter { bottom: auto; top: max(16px, env(safe-area-inset-top, 0px)); right: 16px; grid-template-columns: 4ch 60px 4ch; }
+    .name { max-width: calc(100vw - 32px); }
+    .name p { display: none; }
+  }
+</style>
+
+<canvas id="gl"></canvas>
+
+<div class="chrome" id="chrome">
+  <div class="name">
+    <h1 id="title"><span>A</span>Dye</h1>
+    <p id="blurb"></p>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <button id="play" aria-pressed="true">Pause</button>
+      <button id="drop">Drop</button>
+      <button id="mic" aria-pressed="false">Mic</button>
+      <label class="bpm" for="bpm">BPM <input type="range" id="bpm" min="90" max="150" step="1" value="124" style="width:70px"> <output id="bpmOut">124</output></label>
+    </div>
+    <div class="knobs" id="knobs"></div>
+    <div class="hint"><kbd>←</kbd> <kbd>→</kbd> switch engine · <kbd>space</kbd> pause · <kbd>H</kbd> hide controls</div>
+  </div>
+
+  <div class="meter" id="meter">
+    <span class="lbl">bass</span><span class="bar" id="bBass"><i></i></span><span class="val" id="vBass">0.00</span>
+    <span class="lbl">mid</span><span class="bar" id="bMid"><i></i></span><span class="val" id="vMid">0.00</span>
+    <span class="lbl">high</span><span class="bar" id="bHigh"><i></i></span><span class="val" id="vHigh">0.00</span>
+    <span class="lbl">loud</span><span class="bar" id="bLoud"><i></i></span><span class="val" id="vLoud">0.00</span>
+    <span class="src" id="src">synthetic beat · 124 bpm · 8-bar phrases with a breakdown</span>
+  </div>
+
+  <div class="switch" role="group" aria-label="Engine">
+    <button id="prev" aria-label="Previous engine">◀</button>
+    <span class="cur" id="cur">A — Dye</span>
+    <button id="next" aria-label="Next engine">▶</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- palette (shared across engines so the comparison is about fluid, not colour) ----------
+const hex = h => [1,3,5].map(i => parseInt(h.slice(i, i+2), 16) / 255);
+const PAL = {
+  ground:    hex('#07050A'),
+  grenadine: hex('#5A0E2E'),
+  punch:     hex('#E8324A'),
+  coral:     hex('#FF6B4A'),
+  citrus:    hex('#FFB454'),
+  plum:      hex('#7A1E6E'),
+};
+const DYES = [PAL.punch, PAL.coral, PAL.citrus, PAL.plum];
+
+// ---------- GL scaffolding ----------
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+if (!gl) { toast('This page needs WebGL2. Try Safari, Chrome or Firefox on a Mac.'); return; }
+const hasFloat = !!gl.getExtension('EXT_color_buffer_float');
+gl.getExtension('OES_texture_float_linear');
+gl.bindVertexArray(gl.createVertexArray());
+gl.disable(gl.BLEND);
+
+const VS = `#version 300 es
+precision highp float;
+out vec2 v_uv;
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  v_uv = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+const FS_HEAD = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 v_uv;
+out vec4 o;
+`;
+const NOISE = `
+float hash1(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float noise3(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash1(i), hash1(i + vec3(1,0,0)), f.x), mix(hash1(i + vec3(0,1,0)), hash1(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash1(i + vec3(0,0,1)), hash1(i + vec3(1,0,1)), f.x), mix(hash1(i + vec3(0,1,1)), hash1(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * noise3(p); p *= 2.03; a *= 0.5; } return s; }
+`;
+
+let vsObj = null;
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s), src); toast('Shader failed to compile — see console.'); }
+  return s;
+}
+function program(fs) {
+  vsObj = vsObj || compile(gl.VERTEX_SHADER, VS);
+  const p = gl.createProgram(); gl.attachShader(p, vsObj); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, FS_HEAD + fs)); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(p));
+  const cache = {};
+  return {
+    use() { gl.useProgram(p); return this; },
+    u(n) { if (!(n in cache)) cache[n] = gl.getUniformLocation(p, n); return cache[n]; },
+    f(n, v) { gl.uniform1f(this.u(n), v); return this; },
+    i(n, v) { gl.uniform1i(this.u(n), v); return this; },
+    v2(n, a, b) { gl.uniform2f(this.u(n), a, b); return this; },
+    v3(n, v) { gl.uniform3f(this.u(n), v[0], v[1], v[2]); return this; },
+    v4(n, a, b, c, d) { gl.uniform4f(this.u(n), a, b, c, d); return this; },
+    tex(n, t, unit) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t.tex); gl.uniform1i(this.u(n), unit); return this; },
+  };
+}
+const FMT = hasFloat
+  ? { rgba: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], rg: [gl.RG16F, gl.RG, gl.HALF_FLOAT], r: [gl.R16F, gl.RED, gl.HALF_FLOAT] }
+  : { rgba: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rg: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], r: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE] };
+function fbo(w, h, fmt, filter = gl.LINEAR) {
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, fmt[0], w, h, 0, fmt[1], fmt[2], null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  return { tex, fb, w, h, tx: 1 / w, ty: 1 / h, destroy() { gl.deleteTexture(tex); gl.deleteFramebuffer(fb); } };
+}
+function dfbo(w, h, fmt, filter) {
+  let a = fbo(w, h, fmt, filter), b = fbo(w, h, fmt, filter);
+  return { get read() { return a; }, get write() { return b; }, swap() { [a, b] = [b, a]; }, w, h, tx: 1 / w, ty: 1 / h, destroy() { a.destroy(); b.destroy(); } };
+}
+function draw(target) {
+  if (target) { gl.bindFramebuffer(gl.FRAMEBUFFER, target.fb); gl.viewport(0, 0, target.w, target.h); }
+  else { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height); }
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+const rnd = (a = 0, b = 1) => a + Math.random() * (b - a);
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+// ---------- audio: synthetic beat clock, or the microphone ----------
+class Synth {
+  constructor() { this.bpm = 124; this.beat = 0; this.lastKick = -1; this.lastHalf = -1; this.kick = 0; this.snare = 0; this.hat = 0; this.forceDrop = false; }
+  tick(dt, f) {
+    this.beat += (this.bpm / 60) * dt;
+    const b = this.beat, phrase = Math.floor(b / 32) % 4, breakdown = phrase === 3, build = breakdown ? (b % 32) / 32 : 0;
+    const energy = 0.55 + 0.45 * Math.sin((b / 64) * Math.PI * 2 - Math.PI / 2);
+    const idx = Math.floor(b), half = Math.floor(b * 2);
+    let oB = 0, oM = 0, oH = 0;
+    if (idx !== this.lastKick) {
+      this.lastKick = idx;
+      if (!breakdown) oB = idx % 4 === 0 ? 1 : 0.8;
+      if (idx % 32 === 0) oB = 1;
+      if (idx % 2 === 1 && !breakdown) oM = 0.9;
+    }
+    if (half !== this.lastHalf) { this.lastHalf = half; oH = half % 2 ? 0.75 : 0.4; if (breakdown && build > 0.5 && half % 2 === 0) oM = 0.5 + build * 0.5; }
+    if (this.forceDrop) { oB = 1; oM = 1; this.forceDrop = false; }
+    this.kick = Math.max(this.kick * Math.exp(-dt * 9), oB); this.snare = Math.max(this.snare * Math.exp(-dt * 7), oM); this.hat = Math.max(this.hat * Math.exp(-dt * 18), oH);
+    f.bass = 0.12 + this.kick * 0.88 * (breakdown ? 0.3 : energy);
+    f.mid = 0.16 + this.snare * 0.5 + 0.12 * (0.5 + 0.5 * Math.sin(b * Math.PI / 8)) * energy + build * 0.4;
+    f.high = 0.08 + this.hat * 0.55 * (0.6 + 0.4 * energy) + build * 0.3;
+    f.loud = Math.min(1, 0.3 * f.bass + 0.4 * f.mid + 0.3 * f.high);
+    f.onsetBass = oB; f.onsetMid = oM; f.onsetHigh = oH; f.beat = b; f.bpm = this.bpm; f.label = `synthetic beat · ${this.bpm} bpm · ${breakdown ? 'breakdown' : 'phrase ' + (phrase + 1)}`;
+  }
+}
+class Mic {
+  constructor() { this.ok = false; this.bands = [[20, 150], [150, 2000], [2000, 11000]]; this.long = [0.01, 0.01, 0.01]; this.short = [0, 0, 0]; this.lastOn = [0, 0, 0]; }
+  async start() {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    this.ctx = new AudioContext(); const src = this.ctx.createMediaStreamSource(stream);
+    this.an = this.ctx.createAnalyser(); this.an.fftSize = 2048; this.an.smoothingTimeConstant = 0.2; src.connect(this.an);
+    this.buf = new Uint8Array(this.an.frequencyBinCount); this.ok = true; this.stream = stream;
+  }
+  stop() { this.ok = false; this.stream?.getTracks().forEach(t => t.stop()); this.ctx?.close(); }
+  tick(dt, f, now) {
+    this.an.getByteFrequencyData(this.buf);
+    const hzPerBin = this.ctx.sampleRate / this.an.fftSize, out = [], on = [];
+    const c = Math.pow(0.5, dt * 60 / 60);
+    this.bands.forEach(([lo, hi], i) => {
+      let s = 0, n = 0; for (let k = Math.floor(lo / hzPerBin); k < Math.min(this.buf.length, hi / hzPerBin); k++) { s += this.buf[k]; n++; }
+      const imm = n ? s / n / 255 : 0;
+      this.short[i] = this.short[i] * 0.6 + imm * 0.4;
+      this.long[i] = Math.max(0.02, this.long[i] * Math.pow(0.995, dt * 60) + imm * (1 - Math.pow(0.995, dt * 60)));
+      const ratio = imm / this.long[i];
+      out[i] = Math.min(1, ratio * 0.45);
+      const jump = imm - this.short[i];
+      on[i] = (jump > 0.06 && imm > 0.12 && now - this.lastOn[i] > 0.09) ? Math.min(1, jump * 6) : 0;
+      if (on[i]) this.lastOn[i] = now;
+    });
+    f.bass = out[0]; f.mid = out[1]; f.high = out[2]; f.loud = Math.min(1, 0.3 * out[0] + 0.4 * out[1] + 0.3 * out[2]);
+    f.onsetBass = on[0]; f.onsetMid = on[1]; f.onsetHigh = on[2]; f.label = 'microphone · ratio to a 5 s baseline';
+  }
+}
+
+// ---------- engines ----------
+function engineDye(W, H) {
+  const aspect = W / H;
+  const dyeH = 720, dyeW = Math.round(dyeH * aspect), simH = 256, simW = Math.round(simH * aspect);
+  const vel = dfbo(simW, simH, FMT.rg), dye = dfbo(dyeW, dyeH, FMT.rgba);
+  const div = fbo(simW, simH, FMT.r, gl.NEAREST), curl = fbo(simW, simH, FMT.r, gl.NEAREST), prs = dfbo(simW, simH, FMT.r, gl.NEAREST);
+  const P = {
+    advect: program(`uniform sampler2D uVel, uSrc; uniform vec2 texel; uniform float dt, diss;
+      void main(){ vec2 c = v_uv - dt * texture(uVel, v_uv).xy * texel; o = diss * texture(uSrc, c); }`),
+    splat: program(`uniform sampler2D uT; uniform float aspect, radius; uniform vec2 pt; uniform vec3 col;
+      void main(){ vec2 p = v_uv - pt; p.x *= aspect; o = vec4(texture(uT, v_uv).xyz + exp(-dot(p,p)/radius) * col, 1.0); }`),
+    curl: program(`uniform sampler2D uVel; uniform vec2 texel;
+      void main(){ float L = texture(uVel, v_uv - vec2(texel.x,0)).y, R = texture(uVel, v_uv + vec2(texel.x,0)).y;
+        float B = texture(uVel, v_uv - vec2(0,texel.y)).x, T = texture(uVel, v_uv + vec2(0,texel.y)).x; o = vec4(0.5*((R-L)-(T-B)),0,0,1); }`),
+    vort: program(`uniform sampler2D uVel, uCurl; uniform vec2 texel; uniform float k, dt;
+      void main(){ float L = texture(uCurl, v_uv - vec2(texel.x,0)).x, R = texture(uCurl, v_uv + vec2(texel.x,0)).x;
+        float B = texture(uCurl, v_uv - vec2(0,texel.y)).x, T = texture(uCurl, v_uv + vec2(0,texel.y)).x, C = texture(uCurl, v_uv).x;
+        vec2 f = 0.5 * vec2(abs(T)-abs(B), abs(R)-abs(L)); f /= length(f) + 1e-4; f *= k * C; f.y *= -1.0;
+        o = vec4(clamp(texture(uVel, v_uv).xy + f * dt, -1000.0, 1000.0), 0, 1); }`),
+    div: program(`uniform sampler2D uVel; uniform vec2 texel;
+      void main(){ float L = texture(uVel, v_uv - vec2(texel.x,0)).x, R = texture(uVel, v_uv + vec2(texel.x,0)).x;
+        float B = texture(uVel, v_uv - vec2(0,texel.y)).y, T = texture(uVel, v_uv + vec2(0,texel.y)).y; vec2 C = texture(uVel, v_uv).xy;
+        if (v_uv.x - texel.x < 0.0) L = -C.x; if (v_uv.x + texel.x > 1.0) R = -C.x; if (v_uv.y - texel.y < 0.0) B = -C.y; if (v_uv.y + texel.y > 1.0) T = -C.y;
+        o = vec4(0.5*(R-L+T-B),0,0,1); }`),
+    jac: program(`uniform sampler2D uP, uDiv; uniform vec2 texel;
+      void main(){ float L = texture(uP, v_uv - vec2(texel.x,0)).x, R = texture(uP, v_uv + vec2(texel.x,0)).x;
+        float B = texture(uP, v_uv - vec2(0,texel.y)).x, T = texture(uP, v_uv + vec2(0,texel.y)).x; o = vec4((L+R+B+T - texture(uDiv, v_uv).x)*0.25,0,0,1); }`),
+    grad: program(`uniform sampler2D uP, uVel; uniform vec2 texel;
+      void main(){ float L = texture(uP, v_uv - vec2(texel.x,0)).x, R = texture(uP, v_uv + vec2(texel.x,0)).x;
+        float B = texture(uP, v_uv - vec2(0,texel.y)).x, T = texture(uP, v_uv + vec2(0,texel.y)).x; o = vec4(texture(uVel, v_uv).xy - vec2(R-L, T-B), 0, 1); }`),
+    fade: program(`uniform sampler2D uT; uniform float k; void main(){ o = texture(uT, v_uv) * k; }`),
+    show: program(`uniform sampler2D uDye; uniform vec3 ground; uniform float glow;
+      void main(){ vec3 c = texture(uDye, v_uv).rgb; vec2 q = v_uv - 0.5; float vig = 1.0 - dot(q,q) * 0.7;
+        c = 1.0 - exp(-c * (1.1 + glow)); o = vec4((ground + c) * vig, 1.0); }`),
+  };
+  const splat = (x, y, r, col, targetD) => { P.splat.use().tex('uT', targetD.read, 0).f('aspect', aspect).f('radius', r).v2('pt', x, y).v3('col', col); draw(targetD.write); targetD.swap(); };
+  const k = { visc: 0.985, swirl: 22, size: 0.0012 };
+  for (let i = 0; i < 6; i++) { const x = rnd(.2, .8), y = rnd(.2, .8), a = rnd(0, 6.28); splat(x, y, k.size * 3, [Math.cos(a) * 180, Math.sin(a) * 180, 0], vel); splat(x, y, k.size * 3, pick(DYES).map(c => c * .5), dye); }
+  return {
+    knobs: [
+      { id: 'visc', label: 'Viscosity', min: 0.95, max: 0.999, step: 0.001, fmt: v => v.toFixed(3) },
+      { id: 'swirl', label: 'Swirl', min: 0, max: 60, step: 1, fmt: v => v.toFixed(0) },
+      { id: 'size', label: 'Splat size', min: 0.0003, max: 0.006, step: 0.0001, fmt: v => (v * 1000).toFixed(1) },
+    ], k,
+    step(f, dt) {
+      if (f.onsetBass > 0) { const n = f.onsetBass > 0.9 ? 3 : 1; for (let i = 0; i < n; i++) { const x = rnd(.15, .85), y = rnd(.15, .85), a = rnd(0, 6.28), m = 120 + 260 * f.onsetBass; splat(x, y, k.size * 2, [Math.cos(a) * m, Math.sin(a) * m, 0], vel); splat(x, y, k.size * 2, pick(DYES).map(c => c * (0.35 + 0.5 * f.onsetBass)), dye); } }
+      if (f.onsetHigh > 0.5) { const x = rnd(.1, .9), y = rnd(.1, .9); splat(x, y, k.size * 0.25, PAL.citrus.map(c => c * 0.5 * f.onsetHigh), dye); splat(x, y, k.size * 0.25, [rnd(-60, 60), rnd(-60, 60), 0], vel); }
+      P.curl.use().tex('uVel', vel.read, 0).v2('texel', vel.tx, vel.ty); draw(curl);
+      P.vort.use().tex('uVel', vel.read, 0).tex('uCurl', curl, 1).v2('texel', vel.tx, vel.ty).f('k', k.swirl * (0.6 + f.bass)).f('dt', dt); draw(vel.write); vel.swap();
+      P.div.use().tex('uVel', vel.read, 0).v2('texel', vel.tx, vel.ty); draw(div);
+      P.fade.use().tex('uT', prs.read, 0).f('k', 0.8); draw(prs.write); prs.swap();
+      for (let i = 0; i < 20; i++) { P.jac.use().tex('uP', prs.read, 0).tex('uDiv', div, 1).v2('texel', vel.tx, vel.ty); draw(prs.write); prs.swap(); }
+      P.grad.use().tex('uP', prs.read, 0).tex('uVel', vel.read, 1).v2('texel', vel.tx, vel.ty); draw(vel.write); vel.swap();
+      P.advect.use().tex('uVel', vel.read, 0).tex('uSrc', vel.read, 0).v2('texel', vel.tx, vel.ty).f('dt', dt).f('diss', 0.985); draw(vel.write); vel.swap();
+      P.advect.use().tex('uVel', vel.read, 0).tex('uSrc', dye.read, 1).v2('texel', vel.tx, vel.ty).f('dt', dt).f('diss', k.visc); draw(dye.write); dye.swap();
+      P.show.use().tex('uDye', dye.read, 0).v3('ground', PAL.ground).f('glow', f.loud * 0.4); draw(null);
+    },
+    destroy() { vel.destroy(); dye.destroy(); div.destroy(); curl.destroy(); prs.destroy(); },
+  };
+}
+
+function engineFerro(W, H) {
+  const scale = 0.5, rw = Math.round(W * scale), rh = Math.round(H * scale);
+  const buf = fbo(rw, rh, FMT.rgba);
+  const P = {
+    march: program(NOISE + `
+      uniform vec2 res; uniform float t, bass, mid, high, spike, spikeH, spikeF, merge; uniform vec3 cA, cB, cC, ground;
+      float smin(float a, float b, float k){ float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0); return mix(b, a, h) - k*h*(1.0-h); }
+      float map(vec3 p){
+        float d = p.y + 0.55;
+        for (int i = 0; i < 6; i++) {
+          float fi = float(i);
+          vec3 c = vec3(sin(t*0.31 + fi*1.7)*1.25, -0.45 + 0.18*sin(t*0.53 + fi*2.3) + bass*0.25, cos(t*0.27 + fi*2.1)*0.85);
+          d = smin(d, length(p - c) - (0.42 + 0.28*bass), merge);
+        }
+        float n = noise3(p * spikeF + vec3(0.0, t*0.35, 0.0));
+        d -= spike * spikeH * pow(n, 5.0) * 1.6;
+        return d;
+      }
+      vec3 nrm(vec3 p){ vec2 e = vec2(0.0025, 0.0); return normalize(vec3(map(p+e.xyy)-map(p-e.xyy), map(p+e.yxy)-map(p-e.yxy), map(p+e.yyx)-map(p-e.yyx))); }
+      void main(){
+        vec2 uv = (v_uv*2.0-1.0) * vec2(res.x/res.y, 1.0);
+        vec3 ro = vec3(0.0, 1.35, 3.3), ta = vec3(0.0, -0.35, 0.0);
+        vec3 f = normalize(ta - ro), r = normalize(cross(f, vec3(0,1,0))), u = cross(r, f);
+        vec3 rd = normalize(uv.x*r + uv.y*u + 1.7*f);
+        float dist = 0.0; bool hit = false; vec3 p;
+        for (int i = 0; i < 90; i++) { p = ro + rd*dist; float d = map(p); if (d < 0.0018) { hit = true; break; } dist += d*0.8; if (dist > 14.0) break; }
+        vec3 bg = ground + cC * 0.06 * smoothstep(-0.2, 0.6, uv.y);
+        vec3 col = bg;
+        if (hit) {
+          vec3 n = nrm(p); vec3 l = normalize(vec3(0.5, 0.9, 0.4));
+          float fres = pow(1.0 - max(dot(n, -rd), 0.0), 4.0);
+          vec3 rf = reflect(rd, n);
+          vec3 env = mix(ground*2.0, cA, smoothstep(-0.1, 0.7, rf.y)) + cB * pow(max(rf.y, 0.0), 10.0) * 0.6;
+          float spec = pow(max(dot(reflect(-l, n), -rd), 0.0), 90.0);
+          float spec2 = pow(max(dot(reflect(-normalize(vec3(-0.7,0.5,-0.3)), n), -rd), 0.0), 40.0);
+          vec3 base = mix(ground * 1.3, cC * 0.25, smoothstep(-0.55, 0.6, p.y));
+          col = base + fres * env * 1.1 + spec * vec3(1.0, 0.92, 0.82) * (0.7 + high*0.6) + spec2 * cA * 0.35;
+          col = mix(col, bg, smoothstep(6.0, 14.0, dist));
+        }
+        vec2 q = v_uv - 0.5; col *= 1.0 - dot(q,q)*0.5;
+        o = vec4(col, 1.0);
+      }`),
+    show: program(`uniform sampler2D uT; void main(){ vec3 c = texture(uT, v_uv).rgb; o = vec4(1.0 - exp(-c*1.25), 1.0); }`),
+  };
+  const k = { spikeH: 0.22, spikeF: 5.5, merge: 0.55 }; let t = 0, env = 0;
+  return {
+    knobs: [
+      { id: 'spikeH', label: 'Spike height', min: 0, max: 0.5, step: 0.01, fmt: v => v.toFixed(2) },
+      { id: 'spikeF', label: 'Spike density', min: 2, max: 12, step: 0.1, fmt: v => v.toFixed(1) },
+      { id: 'merge', label: 'Viscosity', min: 0.1, max: 1.2, step: 0.01, fmt: v => v.toFixed(2) },
+    ], k,
+    step(f, dt) {
+      t += dt * (0.7 + f.mid * 0.6);
+      env = Math.max(env * Math.exp(-dt * 5), f.onsetBass);
+      P.march.use().v2('res', rw, rh).f('t', t).f('bass', f.bass).f('mid', f.mid).f('high', f.high).f('spike', 0.35 + env * 0.9 + f.bass * 0.3)
+        .f('spikeH', k.spikeH).f('spikeF', k.spikeF).f('merge', k.merge).v3('cA', PAL.punch).v3('cB', PAL.citrus).v3('cC', PAL.plum).v3('ground', PAL.ground);
+      draw(buf);
+      P.show.use().tex('uT', buf, 0); draw(null);
+    },
+    destroy() { buf.destroy(); },
+  };
+}
+
+function engineBowl(W, H) {
+  const aspect = W / H, simH = 512, simW = Math.round(simH * aspect);
+  const h = dfbo(simW, simH, FMT.rg);
+  const P = {
+    wave: program(`uniform sampler2D uH; uniform vec2 texel; uniform float c2, damp, aspect, slosh, t; uniform vec4 drops[6]; uniform int nDrops;
+      void main(){ vec2 hh = texture(uH, v_uv).rg;
+        float L = texture(uH, v_uv - vec2(texel.x,0)).r, R = texture(uH, v_uv + vec2(texel.x,0)).r, B = texture(uH, v_uv - vec2(0,texel.y)).r, T = texture(uH, v_uv + vec2(0,texel.y)).r;
+        float lap = L + R + B + T - 4.0*hh.r;
+        float hn = (2.0*hh.r - hh.g + c2*lap) * damp;
+        for (int i = 0; i < 6; i++) { if (i >= nDrops) break; vec2 p = v_uv - drops[i].xy; p.x *= aspect; hn += drops[i].w * exp(-dot(p,p)/drops[i].z); }
+        vec2 q = (v_uv - 0.5) * vec2(aspect, 1.0); hn += slosh * 0.0006 * sin(q.x*4.0 + t*1.3) * cos(q.y*3.0 - t*0.9);
+        vec2 e = abs(v_uv - 0.5) * 2.0; float edge = smoothstep(1.0, 0.94, max(e.x, e.y)); hn *= mix(0.94, 1.0, edge);
+        o = vec4(hn, hh.r, 0, 1); }`),
+    show: program(NOISE + `uniform sampler2D uH; uniform vec2 texel; uniform float aspect, t, bass, loud, depth; uniform vec3 cDeep, cA, cB, cC, ground;
+      void main(){
+        float L = texture(uH, v_uv - vec2(texel.x,0)).r, R = texture(uH, v_uv + vec2(texel.x,0)).r, B = texture(uH, v_uv - vec2(0,texel.y)).r, T = texture(uH, v_uv + vec2(0,texel.y)).r, C = texture(uH, v_uv).r;
+        vec3 n = normalize(vec3(-(R-L)*28.0, -(T-B)*28.0, 1.0));
+        vec2 ruv = v_uv + n.xy * depth;
+        vec3 q = vec3(ruv * vec2(aspect, 1.0) * 2.2, t*0.07);
+        float m1 = fbm(q), m2 = fbm(q + vec3(3.1, 1.7, 0.0) + m1*0.9);
+        vec3 liquid = mix(cDeep, cA, smoothstep(0.25, 0.7, m1));
+        liquid = mix(liquid, cB, smoothstep(0.55, 0.85, m2) * 0.8);
+        liquid = mix(liquid, cC, smoothstep(0.6, 0.9, fbm(q*1.7 + 5.0)) * 0.5);
+        float lap = (L + R + B + T - 4.0*C);
+        float caustic = clamp(lap * 60.0, -0.6, 1.2);
+        liquid *= 1.0 + caustic * 0.9 + bass * 0.25;
+        vec3 l = normalize(vec3(0.35, 0.55, 0.75));
+        float spec = pow(max(dot(reflect(-l, n), vec3(0,0,1)), 0.0), 140.0);
+        float fres = pow(1.0 - n.z, 2.5);
+        vec3 col = liquid + spec * vec3(1.0, 0.95, 0.85) * 1.4 + fres * cB * 0.35;
+        vec2 e = (v_uv - 0.5) * vec2(aspect, 1.0); float rim = length(e);
+        col = mix(col, ground, smoothstep(0.62, 0.95, rim));
+        col += cB * 0.25 * smoothstep(0.03, 0.0, abs(rim - 0.66)) * (0.6 + 0.4*sin(atan(e.y, e.x)*3.0 + t*0.5));
+        o = vec4(1.0 - exp(-col * 1.15), 1.0); }`),
+  };
+  const k = { damp: 0.992, ripple: 0.0016, speed: 0.9, depth: 0.09 }; let t = 0; const drops = [];
+  const drop = (x, y, r, a) => { if (drops.length < 6) drops.push([x, y, r, a]); };
+  return {
+    knobs: [
+      { id: 'damp', label: 'Damping', min: 0.97, max: 0.999, step: 0.001, fmt: v => v.toFixed(3) },
+      { id: 'ripple', label: 'Ripple size', min: 0.0003, max: 0.006, step: 0.0001, fmt: v => (v * 1000).toFixed(1) },
+      { id: 'speed', label: 'Wave speed', min: 0.3, max: 1.6, step: 0.05, fmt: v => v.toFixed(2) },
+      { id: 'depth', label: 'Refraction', min: 0, max: 0.25, step: 0.005, fmt: v => v.toFixed(3) },
+    ], k,
+    step(f, dt) {
+      t += dt;
+      if (f.onsetBass > 0) drop(rnd(.35, .65), rnd(.35, .65), k.ripple * 6, -0.9 * f.onsetBass);
+      if (f.onsetMid > 0.5) drop(rnd(.15, .85), rnd(.15, .85), k.ripple * 2, 0.45 * f.onsetMid);
+      if (f.onsetHigh > 0.6) drop(rnd(.05, .95), rnd(.05, .95), k.ripple * 0.6, 0.35 * f.onsetHigh);
+      const steps = 2;
+      for (let s = 0; s < steps; s++) {
+        P.wave.use().tex('uH', h.read, 0).v2('texel', h.tx, h.ty).f('c2', 0.25 * k.speed).f('damp', k.damp).f('aspect', aspect).f('slosh', f.bass).f('t', t).i('nDrops', drops.length);
+        drops.forEach((d, i) => P.wave.v4(`drops[${i}]`, d[0], d[1], d[2], d[3]));
+        draw(h.write); h.swap(); drops.length = 0;
+      }
+      P.show.use().tex('uH', h.read, 0).v2('texel', h.tx, h.ty).f('aspect', aspect).f('t', t).f('bass', f.bass).f('loud', f.loud).f('depth', k.depth)
+        .v3('cDeep', PAL.grenadine).v3('cA', PAL.punch).v3('cB', PAL.citrus).v3('cC', PAL.coral).v3('ground', PAL.ground); draw(null);
+    },
+    destroy() { h.destroy(); },
+  };
+}
+
+function engineMarble(W, H) {
+  const aspect = W / H, dyeH = 900, dyeW = Math.round(dyeH * aspect);
+  const dye = dfbo(dyeW, dyeH, FMT.rgba);
+  const P = {
+    fill: program(`uniform vec3 col; void main(){ o = vec4(col, 1.0); }`),
+    marble: program(NOISE + `uniform sampler2D uDye; uniform float t, dt, aspect, drift, tineA, tineW, tineOn, dropOn; uniform vec4 tine, drop; uniform vec3 dropCol;
+      vec2 curl(vec2 p){ float e = 0.02; vec3 z = vec3(0.0, 0.0, t*0.12);
+        float a = fbm(vec3(p + vec2(0,e), 0.0) + z), b = fbm(vec3(p - vec2(0,e), 0.0) + z), c = fbm(vec3(p + vec2(e,0), 0.0) + z), d = fbm(vec3(p - vec2(e,0), 0.0) + z);
+        return vec2(a - b, -(c - d)) / (2.0*e); }
+      void main(){
+        vec2 A = vec2(aspect, 1.0);
+        vec2 P = v_uv * A;
+        vec2 v = curl(P * 1.3) * drift * 0.012;
+        vec2 c = P - v * dt * 60.0;
+        if (tineOn > 0.5) { vec2 d = c - tine.xy * A; float perp = dot(d, vec2(-tine.w, tine.z)); c -= tine.zw * tineA * tineW / (abs(perp) + tineW); }
+        if (dropOn > 0.5) { vec2 cc = drop.xy * A; vec2 d = c - cc; float m = length(d);
+          if (m < drop.z) { o = vec4(dropCol, 1.0); return; }
+          c = cc + d * sqrt(1.0 - drop.z*drop.z / (m*m)); }
+        o = texture(uDye, c / A); }`),
+    show: program(`uniform sampler2D uDye; uniform float loud; void main(){ vec3 c = texture(uDye, v_uv).rgb; vec2 q = v_uv - 0.5; c *= 1.0 - dot(q,q)*0.55; c *= 1.0 + loud*0.15; o = vec4(c, 1.0); }`),
+  };
+  P.fill.use().v3('col', PAL.grenadine); draw(dye.read);
+  const k = { drift: 0.8, tineW: 0.06, tineA: 0.05 };
+  let t = 0, colIdx = 0, cx = 0.5, cy = 0.5;
+  const pending = [];
+  for (let i = 0; i < 10; i++) pending.push({ drop: [0.5, 0.5, 0.36 - i * 0.03], col: DYES[i % 4] });
+  const run = (u) => {
+    P.marble.use().tex('uDye', dye.read, 0).f('t', t).f('dt', u.dt || 0).f('aspect', aspect).f('drift', u.dt ? k.drift : 0)
+      .f('tineOn', u.tine ? 1 : 0).f('tineA', u.tine ? u.tine[4] : 0).f('tineW', k.tineW).v4('tine', ...(u.tine || [0, 0, 1, 0]).slice(0, 4))
+      .f('dropOn', u.drop ? 1 : 0).v4('drop', ...(u.drop || [0, 0, 0]), 0).v3('dropCol', u.col || PAL.punch);
+    draw(dye.write); dye.swap();
+  };
+  return {
+    knobs: [
+      { id: 'drift', label: 'Drift', min: 0, max: 3, step: 0.05, fmt: v => v.toFixed(2) },
+      { id: 'tineW', label: 'Tine width', min: 0.01, max: 0.2, step: 0.005, fmt: v => v.toFixed(3) },
+      { id: 'tineA', label: 'Tine pull', min: 0.005, max: 0.15, step: 0.005, fmt: v => v.toFixed(3) },
+    ], k,
+    step(f, dt) {
+      t += dt;
+      while (pending.length) run(pending.shift());
+      cx += (0.5 + 0.28 * Math.sin(t * 0.17) - cx) * 0.02; cy += (0.5 + 0.22 * Math.cos(t * 0.13) - cy) * 0.02;
+      if (f.onsetHigh > 0.6) { colIdx = (colIdx + 1) % DYES.length; run({ drop: [cx, cy, 0.02 + 0.05 * f.onsetHigh * (0.5 + f.mid)], col: DYES[colIdx] }); }
+      if (f.onsetBass > 0) { const a = rnd(0, 6.28), d = [Math.cos(a), Math.sin(a)]; run({ tine: [rnd(.2, .8), rnd(.2, .8), d[0], d[1], k.tineA * (0.5 + f.onsetBass)] }); }
+      if (f.onsetMid > 0.8) run({ tine: [rnd(.1, .9), rnd(.1, .9), 1, 0, k.tineA * 0.4] });
+      run({ dt });
+      P.show.use().tex('uDye', dye.read, 0).f('loud', f.loud); draw(null);
+    },
+    destroy() { dye.destroy(); },
+  };
+}
+
+const ENGINES = {
+  A: { name: 'Dye', make: engineDye, blurb: 'Ink in water. A real Navier–Stokes solve: beats splat <em>colour and force</em> into a velocity field, swirl curls it, and it thins as it spreads. Reads as smoke more than liquid.' },
+  B: { name: 'Ferrofluid', make: engineFerro, blurb: 'Glossy black liquid under a magnet. Raymarched blobs merge and pull apart; bass raises <em>spikes</em> from the surface. The colour lives only in the reflections.' },
+  C: { name: 'Bowl', make: engineBowl, blurb: 'Looking down into the punch. A wave-equation surface refracts the liquid beneath: bass sloshes the whole bowl, hits drop <em>ripples</em>, the rim catches the light.' },
+  D: { name: 'Marbling', make: engineMarble, blurb: 'Suminagashi. Paint that never mixes: highs drop <em>rings</em> of new colour, bass drags a tine through them, and the whole sheet drifts on a slow current.' },
+};
+const KEYS = Object.keys(ENGINES);
+
+// ---------- state, chrome, loop ----------
+const $ = id => document.getElementById(id);
+const synth = new Synth(), mic = new Mic();
+const frame = { bass: 0, mid: 0, high: 0, loud: 0, onsetBass: 0, onsetMid: 0, onsetHigh: 0, beat: 0, bpm: 124, label: '' };
+let engine = null, key = null, playing = !matchMedia('(prefers-reduced-motion: reduce)').matches, last = performance.now(), hudTick = 0;
+
+function toast(msg) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = msg; $('chrome').appendChild(d); setTimeout(() => d.remove(), 4200); }
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 1.5);
+  const w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
+  if (canvas.width === w && canvas.height === h) return;
+  canvas.width = w; canvas.height = h;
+  if (key) load(key, true);
+}
+function load(k, force) {
+  if (k === key && !force) return;
+  engine?.destroy(); key = k; engine = ENGINES[k].make(canvas.width, canvas.height);
+  $('title').innerHTML = `<span>${k}</span>${ENGINES[k].name}`; $('blurb').innerHTML = ENGINES[k].blurb; $('cur').textContent = `${k} — ${ENGINES[k].name}`;
+  const box = $('knobs'); box.innerHTML = '';
+  engine.knobs.forEach(kn => {
+    const id = `knob-${k}-${kn.id}`;
+    const row = document.createElement('label'); row.className = 'knob'; row.htmlFor = id;
+    row.innerHTML = `<span>${kn.label}</span><input type="range" id="${id}" min="${kn.min}" max="${kn.max}" step="${kn.step}" value="${engine.k[kn.id]}"><output>${kn.fmt(engine.k[kn.id])}</output>`;
+    const inp = row.querySelector('input'), out = row.querySelector('output');
+    inp.addEventListener('input', () => { engine.k[kn.id] = +inp.value; out.textContent = kn.fmt(+inp.value); });
+    box.appendChild(row);
+  });
+  const url = new URL(location.href); url.searchParams.set('variant', k); history.replaceState(null, '', url);
+}
+function cycle(d) { load(KEYS[(KEYS.indexOf(key) + d + KEYS.length) % KEYS.length]); }
+function setPlaying(p) { playing = p; $('play').textContent = p ? 'Pause' : 'Play'; $('play').setAttribute('aria-pressed', String(p)); }
+
+$('prev').onclick = () => cycle(-1); $('next').onclick = () => cycle(1);
+$('play').onclick = () => setPlaying(!playing);
+$('drop').onclick = () => { synth.forceDrop = true; };
+$('bpm').oninput = e => { synth.bpm = +e.target.value; $('bpmOut').textContent = e.target.value; };
+$('mic').onclick = async () => {
+  if (mic.ok) { mic.stop(); $('mic').setAttribute('aria-pressed', 'false'); return; }
+  try { await mic.start(); $('mic').setAttribute('aria-pressed', 'true'); }
+  catch (e) { toast('Microphone unavailable here — this page may be blocked from using it. The synthetic beat keeps running.'); }
+};
+addEventListener('keydown', e => {
+  if (/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+  if (e.key === 'ArrowLeft') cycle(-1); else if (e.key === 'ArrowRight') cycle(1);
+  else if (e.key === ' ') { e.preventDefault(); setPlaying(!playing); }
+  else if (e.key.toLowerCase() === 'h') $('chrome').classList.toggle('hidden');
+});
+addEventListener('resize', resize);
+
+function hud() {
+  const set = (b, v, on) => { $('b' + b).firstElementChild.style.width = `${Math.min(1, v) * 100}%`; $('b' + b).classList.toggle('onset', on > 0); $('v' + b).textContent = v.toFixed(2); };
+  set('Bass', frame.bass, frame.onsetBass); set('Mid', frame.mid, frame.onsetMid); set('High', frame.high, frame.onsetHigh); set('Loud', frame.loud, 0);
+  $('src').textContent = frame.label;
+}
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(1 / 30, Math.max(0.001, (now - last) / 1000)); last = now;
+  if (!playing) return;
+  if (mic.ok) mic.tick(dt, frame, now / 1000); else synth.tick(dt, frame);
+  engine.step(frame, dt);
+  if (++hudTick % 2 === 0) hud();
+}
+
+resize();
+load(KEYS.includes(new URLSearchParams(location.search).get('variant')) ? new URLSearchParams(location.search).get('variant') : 'A');
+setPlaying(playing);
+if (!hasFloat) toast('No float render targets on this GPU — the simulations will look coarse.');
+requestAnimationFrame(loop);
+})();
+</script>
