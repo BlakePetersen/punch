@@ -113,7 +113,7 @@
       <label class="bpm" for="bpm">BPM <input type="range" id="bpm" min="90" max="150" step="1" value="124" style="width:70px"> <output id="bpmOut">124</output></label>
     </div>
     <div class="knobs" id="knobs"></div>
-    <div class="hint"><kbd>←</kbd> <kbd>→</kbd> switch engine · <kbd>space</kbd> pause · <kbd>H</kbd> hide controls</div>
+    <div class="hint"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> switch engine &middot; <kbd>space</kbd> pause &middot; <kbd>H</kbd> hide controls</div>
   </div>
 
   <div class="meter" id="meter">
@@ -121,13 +121,13 @@
     <span class="lbl">mid</span><span class="bar" id="bMid"><i></i></span><span class="val" id="vMid">0.00</span>
     <span class="lbl">high</span><span class="bar" id="bHigh"><i></i></span><span class="val" id="vHigh">0.00</span>
     <span class="lbl">loud</span><span class="bar" id="bLoud"><i></i></span><span class="val" id="vLoud">0.00</span>
-    <span class="src" id="src">synthetic beat · 124 bpm · 8-bar phrases with a breakdown</span>
+    <span class="src" id="src">synthetic beat &middot; 124 bpm &middot; 8-bar phrases with a breakdown</span>
   </div>
 
   <div class="switch" role="group" aria-label="Engine">
-    <button id="prev" aria-label="Previous engine">◀</button>
-    <span class="cur" id="cur">A — Dye</span>
-    <button id="next" aria-label="Next engine">▶</button>
+    <button id="prev" aria-label="Previous engine">&#9664;</button>
+    <span class="cur" id="cur">A &mdash; Dye</span>
+    <button id="next" aria-label="Next engine">&#9654;</button>
   </div>
 </div>
 
@@ -249,7 +249,7 @@ class Synth {
     f.mid = 0.16 + this.snare * 0.5 + 0.12 * (0.5 + 0.5 * Math.sin(b * Math.PI / 8)) * energy + build * 0.4;
     f.high = 0.08 + this.hat * 0.55 * (0.6 + 0.4 * energy) + build * 0.3;
     f.loud = Math.min(1, 0.3 * f.bass + 0.4 * f.mid + 0.3 * f.high);
-    f.onsetBass = oB; f.onsetMid = oM; f.onsetHigh = oH; f.beat = b; f.bpm = this.bpm; f.label = `synthetic beat · ${this.bpm} bpm · ${breakdown ? 'breakdown' : 'phrase ' + (phrase + 1)}`;
+    f.onsetBass = oB; f.onsetMid = oM; f.onsetHigh = oH; f.beat = b; f.bpm = this.bpm; f.label = `synthetic beat \u00b7 ${this.bpm} bpm \u00b7 ${breakdown ? 'breakdown' : 'phrase ' + (phrase + 1)}`;
   }
 }
 class Mic {
@@ -277,7 +277,7 @@ class Mic {
       if (on[i]) this.lastOn[i] = now;
     });
     f.bass = out[0]; f.mid = out[1]; f.high = out[2]; f.loud = Math.min(1, 0.3 * out[0] + 0.4 * out[1] + 0.3 * out[2]);
-    f.onsetBass = on[0]; f.onsetMid = on[1]; f.onsetHigh = on[2]; f.label = 'microphone · ratio to a 5 s baseline';
+    f.onsetBass = on[0]; f.onsetMid = on[1]; f.onsetHigh = on[2]; f.label = 'microphone \u00b7 ratio to a 5 s baseline';
   }
 }
 
@@ -520,7 +520,7 @@ function engineMarble(W, H) {
 }
 
 const ENGINES = {
-  A: { name: 'Dye', make: engineDye, blurb: 'Ink in water. A real Navier–Stokes solve: beats splat <em>colour and force</em> into a velocity field, swirl curls it, and it thins as it spreads. Reads as smoke more than liquid.' },
+  A: { name: 'Dye', make: engineDye, blurb: 'Ink in water. A real Navier&ndash;Stokes solve: beats splat <em>colour and force</em> into a velocity field, swirl curls it, and it thins as it spreads. Reads as smoke more than liquid.' },
   B: { name: 'Ferrofluid', make: engineFerro, blurb: 'Glossy black liquid under a magnet. Raymarched blobs merge and pull apart; bass raises <em>spikes</em> from the surface. The colour lives only in the reflections.' },
   C: { name: 'Bowl', make: engineBowl, blurb: 'Looking down into the punch. A wave-equation surface refracts the liquid beneath: bass sloshes the whole bowl, hits drop <em>ripples</em>, the rim catches the light.' },
   D: { name: 'Marbling', make: engineMarble, blurb: 'Suminagashi. Paint that never mixes: highs drop <em>rings</em> of new colour, bass drags a tine through them, and the whole sheet drifts on a slow current.' },
@@ -545,7 +545,7 @@ function resize() {
 function load(k, force) {
   if (k === key && !force) return;
   engine?.destroy(); key = k; engine = ENGINES[k].make(canvas.width, canvas.height);
-  $('title').innerHTML = `<span>${k}</span>${ENGINES[k].name}`; $('blurb').innerHTML = ENGINES[k].blurb; $('cur').textContent = `${k} — ${ENGINES[k].name}`;
+  $('title').innerHTML = `<span>${k}</span>${ENGINES[k].name}`; $('blurb').innerHTML = ENGINES[k].blurb; $('cur').textContent = `${k} \u2014 ${ENGINES[k].name}`;
   const box = $('knobs'); box.innerHTML = '';
   engine.knobs.forEach(kn => {
     const id = `knob-${k}-${kn.id}`;
