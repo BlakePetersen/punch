@@ -101,7 +101,7 @@
 
 <div class="chrome" id="chrome">
   <div class="name">
-    <h1 id="title"><span>A</span>Dye</h1>
+    <h1 id="title"><span>E</span>Punch</h1>
     <p id="blurb"></p>
   </div>
 
@@ -325,7 +325,7 @@ function engineDye(W, H) {
       { id: 'swirl', label: 'Swirl', min: 0, max: 60, step: 1, fmt: v => v.toFixed(0) },
       { id: 'size', label: 'Splat size', min: 0.0003, max: 0.006, step: 0.0001, fmt: v => (v * 1000).toFixed(1) },
     ], k,
-    step(f, dt) {
+    sim(f, dt) {
       if (f.onsetBass > 0) { const n = f.onsetBass > 0.9 ? 3 : 1; for (let i = 0; i < n; i++) { const x = rnd(.15, .85), y = rnd(.15, .85), a = rnd(0, 6.28), m = 120 + 260 * f.onsetBass; splat(x, y, k.size * 2, [Math.cos(a) * m, Math.sin(a) * m, 0], vel); splat(x, y, k.size * 2, pick(DYES).map(c => c * (0.35 + 0.5 * f.onsetBass)), dye); } }
       if (f.onsetHigh > 0.5) { const x = rnd(.1, .9), y = rnd(.1, .9); splat(x, y, k.size * 0.25, PAL.citrus.map(c => c * 0.5 * f.onsetHigh), dye); splat(x, y, k.size * 0.25, [rnd(-60, 60), rnd(-60, 60), 0], vel); }
       P.curl.use().tex('uVel', vel.read, 0).v2('texel', vel.tx, vel.ty); draw(curl);
@@ -336,8 +336,9 @@ function engineDye(W, H) {
       P.grad.use().tex('uP', prs.read, 0).tex('uVel', vel.read, 1).v2('texel', vel.tx, vel.ty); draw(vel.write); vel.swap();
       P.advect.use().tex('uVel', vel.read, 0).tex('uSrc', vel.read, 0).v2('texel', vel.tx, vel.ty).f('dt', dt).f('diss', 0.985); draw(vel.write); vel.swap();
       P.advect.use().tex('uVel', vel.read, 0).tex('uSrc', dye.read, 1).v2('texel', vel.tx, vel.ty).f('dt', dt).f('diss', k.visc); draw(dye.write); dye.swap();
-      P.show.use().tex('uDye', dye.read, 0).v3('ground', PAL.ground).f('glow', f.loud * 0.4); draw(null);
     },
+    step(f, dt) { this.sim(f, dt); P.show.use().tex('uDye', dye.read, 0).v3('ground', PAL.ground).f('glow', f.loud * 0.4); draw(null); },
+    get tex() { return dye.read; },
     destroy() { vel.destroy(); dye.destroy(); div.destroy(); curl.destroy(); prs.destroy(); },
   };
 }
@@ -449,7 +450,7 @@ function engineBowl(W, H) {
       { id: 'speed', label: 'Wave speed', min: 0.3, max: 1.6, step: 0.05, fmt: v => v.toFixed(2) },
       { id: 'depth', label: 'Refraction', min: 0, max: 0.25, step: 0.005, fmt: v => v.toFixed(3) },
     ], k,
-    step(f, dt) {
+    sim(f, dt) {
       t += dt;
       if (f.onsetBass > 0) drop(rnd(.35, .65), rnd(.35, .65), k.ripple * 6, -0.9 * f.onsetBass);
       if (f.onsetMid > 0.5) drop(rnd(.15, .85), rnd(.15, .85), k.ripple * 2, 0.45 * f.onsetMid);
@@ -460,9 +461,13 @@ function engineBowl(W, H) {
         drops.forEach((d, i) => P.wave.v4(`drops[${i}]`, d[0], d[1], d[2], d[3]));
         draw(h.write); h.swap(); drops.length = 0;
       }
+    },
+    step(f, dt) {
+      this.sim(f, dt);
       P.show.use().tex('uH', h.read, 0).v2('texel', h.tx, h.ty).f('aspect', aspect).f('t', t).f('bass', f.bass).f('loud', f.loud).f('depth', k.depth)
         .v3('cDeep', PAL.grenadine).v3('cA', PAL.punch).v3('cB', PAL.citrus).v3('cC', PAL.coral).v3('ground', PAL.ground); draw(null);
     },
+    get tex() { return h.read; },
     destroy() { h.destroy(); },
   };
 }
@@ -519,7 +524,51 @@ function engineMarble(W, H) {
   };
 }
 
+function engineHybrid(W, H) {
+  const aspect = W / H;
+  const liquid = engineDye(W, H), surface = engineBowl(W, H);
+  const P = {
+    show: program(`uniform sampler2D uH, uDye; uniform vec2 texel; uniform float aspect, t, bass, loud, depth, rim, glow; uniform vec3 ground, deep, cB;
+      void main(){
+        float L = texture(uH, v_uv - vec2(texel.x,0)).r, R = texture(uH, v_uv + vec2(texel.x,0)).r, B = texture(uH, v_uv - vec2(0,texel.y)).r, T = texture(uH, v_uv + vec2(0,texel.y)).r, C = texture(uH, v_uv).r;
+        vec3 n = normalize(vec3(-(R-L)*28.0, -(T-B)*28.0, 1.0));
+        vec2 ruv = v_uv + n.xy * depth;
+        vec3 dye = texture(uDye, ruv).rgb;
+        dye = 1.0 - exp(-dye * (1.7 + glow));
+        float lap = (L + R + B + T - 4.0*C);
+        float caustic = clamp(lap * 60.0, -0.6, 1.2);
+        vec3 col = deep + dye;
+        col *= 1.0 + caustic * 0.8 + bass * 0.15;
+        vec3 l = normalize(vec3(0.35, 0.55, 0.75));
+        float spec = pow(max(dot(reflect(-l, n), vec3(0,0,1)), 0.0), 140.0);
+        float fres = pow(1.0 - n.z, 2.5);
+        col += spec * vec3(1.0, 0.95, 0.85) * 1.3 + fres * cB * 0.3;
+        vec2 e = (v_uv - 0.5) * vec2(aspect, 1.0); float r = length(e);
+        col *= 1.0 - dot(v_uv - 0.5, v_uv - 0.5) * 0.5;
+        if (rim > 0.5) { col = mix(col, ground, smoothstep(0.62, 0.95, r)); col += cB * 0.25 * smoothstep(0.03, 0.0, abs(r - 0.66)) * (0.6 + 0.4*sin(atan(e.y, e.x)*3.0 + t*0.5)); }
+        o = vec4(1.0 - exp(-col * 1.1), 1.0); }`),
+  };
+  const k = { rim: 0 }; let t = 0;
+  const deep = PAL.ground.map((g, i) => g * 0.45 + PAL.grenadine[i] * 0.55);
+  return {
+    knobs: [
+      ...liquid.knobs.map(kn => ({ ...kn, owner: liquid })),
+      ...surface.knobs.filter(kn => kn.id !== 'speed').map(kn => ({ ...kn, owner: surface })),
+      { id: 'rim', label: 'Bowl rim', min: 0, max: 1, step: 1, fmt: v => v ? 'on' : 'off' },
+    ], k,
+    step(f, dt) {
+      t += dt;
+      liquid.sim(f, dt); surface.sim(f, dt);
+      P.show.use().tex('uH', surface.tex, 0).tex('uDye', liquid.tex, 1).v2('texel', surface.tex.tx, surface.tex.ty).f('aspect', aspect).f('t', t)
+        .f('bass', f.bass).f('loud', f.loud).f('depth', surface.k.depth).f('rim', k.rim).f('glow', f.loud * 0.5)
+        .v3('ground', PAL.ground).v3('deep', deep).v3('cB', PAL.citrus); draw(null);
+    },
+    destroy() { liquid.destroy(); surface.destroy(); },
+  };
+}
+
 const ENGINES = {
+  E: { name: 'Punch', make: engineHybrid, blurb: 'A under C. The dye solve is the liquid; the wave surface is what you see it through. Bass splats colour <em>and</em> sloshes the bowl; highs only ripple the surface. Two axes for presets to vary.' },
   A: { name: 'Dye', make: engineDye, blurb: 'Ink in water. A real Navier&ndash;Stokes solve: beats splat <em>colour and force</em> into a velocity field, swirl curls it, and it thins as it spreads. Reads as smoke more than liquid.' },
   B: { name: 'Ferrofluid', make: engineFerro, blurb: 'Glossy black liquid under a magnet. Raymarched blobs merge and pull apart; bass raises <em>spikes</em> from the surface. The colour lives only in the reflections.' },
   C: { name: 'Bowl', make: engineBowl, blurb: 'Looking down into the punch. A wave-equation surface refracts the liquid beneath: bass sloshes the whole bowl, hits drop <em>ripples</em>, the rim catches the light.' },
@@ -550,9 +599,10 @@ function load(k, force) {
   engine.knobs.forEach(kn => {
     const id = `knob-${k}-${kn.id}`;
     const row = document.createElement('label'); row.className = 'knob'; row.htmlFor = id;
-    row.innerHTML = `<span>${kn.label}</span><input type="range" id="${id}" min="${kn.min}" max="${kn.max}" step="${kn.step}" value="${engine.k[kn.id]}"><output>${kn.fmt(engine.k[kn.id])}</output>`;
+    const store = kn.owner ? kn.owner.k : engine.k;
+    row.innerHTML = `<span>${kn.label}</span><input type="range" id="${id}" min="${kn.min}" max="${kn.max}" step="${kn.step}" value="${store[kn.id]}"><output>${kn.fmt(store[kn.id])}</output>`;
     const inp = row.querySelector('input'), out = row.querySelector('output');
-    inp.addEventListener('input', () => { engine.k[kn.id] = +inp.value; out.textContent = kn.fmt(+inp.value); });
+    inp.addEventListener('input', () => { store[kn.id] = +inp.value; out.textContent = kn.fmt(+inp.value); });
     box.appendChild(row);
   });
   const url = new URL(location.href); url.searchParams.set('variant', k); history.replaceState(null, '', url);
@@ -592,7 +642,7 @@ function loop(now) {
 }
 
 resize();
-load(KEYS.includes(new URLSearchParams(location.search).get('variant')) ? new URLSearchParams(location.search).get('variant') : 'A');
+load(KEYS.includes(new URLSearchParams(location.search).get('variant')) ? new URLSearchParams(location.search).get('variant') : 'E');
 setPlaying(playing);
 if (!hasFloat) toast('No float render targets on this GPU — the simulations will look coarse.');
 requestAnimationFrame(loop);
