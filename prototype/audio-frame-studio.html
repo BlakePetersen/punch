@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Punch AudioFrame Studio</title>
+<!-- PROTOTYPE for wayfinder ticket #6. Listens to a file, the mic, or the synthetic test track,
+     runs prototype/audio-frame.mjs over it, and draws every AudioFrame field against time so the
+     band splits, AGC, onsets and tempo can be tuned by ear. Throwaway: lives on a prototype branch.
+     Run: python3 -m http.server 8765 --bind 127.0.0.1  (from prototype/), open /audio-frame-studio.html -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #07050A;
+    --ink: #F2E9E4;
+    --muted: #8E8395;
+    --punch: #E8324A;
+    --citrus: #FFB454;
+    --grenadine: #5A0E2E;
+    --plate: rgba(12, 8, 18, 0.55);
+    --line: rgba(242, 233, 228, 0.14);
+    --display: "Syne", "Arial Black", Impact, sans-serif;
+    --text: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--text); font-size: 13px; line-height: 1.4;
+    -webkit-font-smoothing: antialiased; overflow: hidden;
+  }
+  body.drop::after {
+    content: "Drop a track"; position: fixed; inset: 0; display: grid; place-items: center;
+    font-family: var(--display); font-size: clamp(32px, 8vw, 96px); font-weight: 800;
+    background: rgba(7,5,10,.82); color: var(--citrus); pointer-events: none;
+  }
+
+  .app { display: grid; grid-template-columns: 1fr 300px; height: 100vh; }
+  .stage { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; padding: 16px 0 16px 16px; gap: 12px; }
+  .side { padding: 16px 16px 16px 12px; overflow: auto; }
+
+  .head { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+  .head h1 {
+    font-family: var(--display); font-weight: 800; font-size: clamp(24px, 3.4vw, 40px);
+    line-height: .95; letter-spacing: -0.01em; margin: 0;
+  }
+  .head h1 span { color: var(--citrus); font-weight: 700; margin-right: .3em; }
+  .head p { margin: 0 0 3px; color: var(--muted); max-width: 52ch; }
+  .source { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .source .state { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 12ch; }
+
+  button, select, input[type=file]::file-selector-button {
+    font: inherit; font-weight: 600; color: var(--ink); background: transparent;
+    border: 1px solid rgba(242,233,228,.28); border-radius: 3px; padding: 5px 10px; cursor: pointer;
+  }
+  button:hover { border-color: rgba(242,233,228,.6); }
+  button[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--citrus); outline-offset: 2px; }
+  select { background: var(--ground); }
+  input[type=file] { display: none; }
+
+  .lanes { position: relative; min-height: 0; }
+  #chart { width: 100%; height: 100%; display: block; }
+
+  .tempo { display: grid; grid-template-columns: auto auto 1fr; gap: 18px; align-items: center; padding-right: 8px; }
+  .tempo .bpm { font-family: var(--display); font-weight: 800; font-size: 44px; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; min-width: 4.2ch; }
+  .tempo .bpm small { font-family: var(--text); font-weight: 500; font-size: 13px; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+  .tempo .conf { display: grid; gap: 4px; color: var(--muted); min-width: 140px; }
+  .tempo .conf i { display: block; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .tempo .conf i b { display: block; height: 100%; width: 0; background: var(--citrus); transition: width .2s linear; }
+  #phase { width: 52px; height: 52px; display: block; }
+  .tempo .note { color: var(--muted); max-width: 60ch; }
+
+  .panel { display: grid; gap: 14px; }
+  .panel h2 { font-family: var(--display); font-weight: 700; font-size: 15px; margin: 0; letter-spacing: 0; }
+  .group { display: grid; gap: 7px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .group:first-child { border-top: 0; padding-top: 0; }
+  .knob { display: grid; grid-template-columns: 9ch 1fr 8ch; align-items: center; gap: 8px; color: var(--muted); }
+  .knob label { white-space: nowrap; }
+  .knob output { color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
+  input[type=range] { width: 100%; accent-color: var(--citrus); margin: 0; }
+  textarea {
+    font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink); background: transparent;
+    border: 1px solid rgba(242,233,228,.28); border-radius: 3px; padding: 6px 8px; width: 100%; box-sizing: border-box; resize: vertical;
+  }
+  .hint { color: var(--muted); }
+  .hint kbd { font: inherit; color: var(--ink); }
+  pre#json { display: none; }
+
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 1fr auto; height: auto; min-height: 100vh; }
+    body { overflow: auto; }
+    .stage { padding: 16px; height: 70vh; }
+    .side { padding: 0 16px 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .tempo .conf i b { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="stage">
+    <div class="head">
+      <div>
+        <h1><span>#6</span>AudioFrame Studio</h1>
+        <p>Every band, eight seconds at a time. The bright line is 1.0, the long-term baseline. Red ticks are hits.</p>
+      </div>
+      <div class="source" role="group" aria-label="Audio source">
+        <button id="btnFile">Open track</button>
+        <input id="file" type="file" accept="audio/*">
+        <button id="btnMic">Mic</button>
+        <button id="btnSynth">Synthetic 128</button>
+        <button id="btnPlay" aria-pressed="false" disabled>Play</button>
+        <span class="state" id="state">No source</span>
+      </div>
+    </div>
+    <div class="lanes"><canvas id="chart"></canvas></div>
+    <div class="tempo">
+      <div class="bpm"><span id="bpm">—</span><small>bpm</small></div>
+      <div class="conf"><span>confidence <output id="confOut">0.00</output></span><i><b id="confBar"></b></i></div>
+      <canvas id="phase" width="104" height="104" aria-label="Beat phase"></canvas>
+      <p class="note" id="note">Open a track, or start the synthetic one to see the instrument with a known answer: kick every beat, hats on eighths, quiet intro into a drop at 8 s, silence at the end.</p>
+    </div>
+  </section>
+
+  <aside class="side">
+    <form class="panel" id="panel" onsubmit="return false">
+      <div class="group">
+        <h2>Bands</h2>
+        <select id="preset" aria-label="Band preset"></select>
+        <textarea id="bands" rows="6" spellcheck="false" aria-label="Band edges: name low high [refractory ms]"></textarea>
+        <p class="hint">One band per line: <kbd>name low high</kbd>, optional refractory ms fourth.</p>
+      </div>
+      <div class="group" id="knobs"></div>
+      <div class="group">
+        <button id="btnCopy" type="button">Copy tuning JSON</button>
+        <p class="hint" id="copied"><kbd>Space</kbd> plays and pauses.</p>
+      </div>
+    </form>
+  </aside>
+</div>
+<pre id="json"></pre>
+
+<script type="module">
+import { AudioFrameAnalyzer, BAND_PRESETS, DEFAULT_CONFIG, mergeConfig, synthTrack } from './audio-frame.mjs';
+
+// ---- tuning state ------------------------------------------------------------------------
+const patch = { level: {}, onset: {}, presence: {}, time: {}, tempo: {} };
+let bandDefs = BAND_PRESETS['punch-5'];
+let analyzer = null;
+
+const KNOBS = [
+  ['level', 'attackMs', 'attack', 2, 200, 1, 'ms'],
+  ['level', 'releaseMs', 'release', 5, 600, 1, 'ms'],
+  ['level', 'longMs', 'baseline', 500, 20000, 100, 'ms'],
+  ['level', 'silenceDb', 'silence', -100, -40, 1, 'dB'],
+  ['level', 'ratioCeil', 'ratio max', 2, 16, 0.5, 'x'],
+  ['onset', 'k', 'hit k', 1, 4, 0.05, 'x'],
+  ['onset', 'delta', 'hit floor', 0, 0.5, 0.01, ''],
+  ['onset', 'windowMs', 'hit window', 100, 2000, 50, 'ms'],
+  ['onset', 'refractoryMs', 'refractory', 20, 400, 5, 'ms'],
+  ['onset', 'pulseMs', 'pulse', 30, 600, 10, 'ms'],
+  ['presence', 'riseMs', 'pres. rise', 100, 5000, 50, 'ms'],
+  ['presence', 'fallMs', 'pres. fall', 100, 10000, 50, 'ms'],
+  ['time', 'floor', 'time floor', 0, 1, 0.05, 'x'],
+  ['tempo', 'priorBpm', 'tempo prior', 80, 160, 1, 'bpm'],
+];
+const knobsEl = document.getElementById('knobs');
+for (const [group, key, label, min, max, step, unit] of KNOBS) {
+  const row = document.createElement('div'); row.className = 'knob';
+  const id = `k_${group}_${key}`;
+  row.innerHTML = `<label for="${id}">${label}</label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}"><output for="${id}"></output>`;
+  const input = row.querySelector('input'), out = row.querySelector('output');
+  input.value = DEFAULT_CONFIG[group][key];
+  const show = () => { out.textContent = `${input.value}${unit ? ' ' + unit : ''}`; };
+  input.addEventListener('input', () => { patch[group][key] = Number(input.value); if (analyzer) analyzer.config = mergeConfig(analyzer.config, patch); show(); });
+  show();
+  knobsEl.appendChild(row);
+}
+
+const presetEl = document.getElementById('preset');
+const bandsEl = document.getElementById('bands');
+for (const name of Object.keys(BAND_PRESETS)) presetEl.add(new Option(name, name));
+presetEl.value = 'punch-5';
+const showBands = () => { bandsEl.value = bandDefs.map((b) => [b.name, b.lo, b.hi, b.refractoryMs].filter((x) => x !== undefined).join(' ')).join('\n'); };
+presetEl.addEventListener('change', () => { bandDefs = BAND_PRESETS[presetEl.value]; showBands(); rebuild(); });
+bandsEl.addEventListener('change', () => {
+  const defs = bandsEl.value.split('\n').map((l) => l.trim().split(/[\s,]+/)).filter((p) => p.length >= 3)
+    .map(([name, lo, hi, r]) => ({ name, lo: Number(lo), hi: Number(hi), ...(r ? { refractoryMs: Number(r) } : {}) }))
+    .filter((b) => b.hi > b.lo);
+  if (defs.length) { bandDefs = defs; rebuild(); }
+});
+showBands();
+
+function currentConfig() { return mergeConfig(mergeConfig(DEFAULT_CONFIG, patch), { bands: bandDefs }); }
+
+document.getElementById('btnCopy').addEventListener('click', async () => {
+  const text = JSON.stringify(currentConfig(), null, 2);
+  document.getElementById('json').textContent = text;
+  try { await navigator.clipboard.writeText(text); document.getElementById('copied').textContent = 'Copied. Pass it to audio-frame-check.mjs as the second argument.'; }
+  catch { document.getElementById('copied').textContent = 'Clipboard blocked; the JSON is in the page source under #json.'; }
+});
+
+// ---- audio graph -------------------------------------------------------------------------
+let ctx, worklet, sourceNode, mediaStream, playing = false, sourceKind = null, buffer = null, startedAt = 0, offset = 0;
+const stateEl = document.getElementById('state');
+const btnPlay = document.getElementById('btnPlay');
+
+const workletSrc = `
+class Tap extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(512); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0];
+    if (!ch || !ch.length) return true;
+    const L = ch[0], R = ch[1] || ch[0];
+    for (let i = 0; i < L.length; i++) {
+      this.buf[this.n++] = 0.5 * (L[i] + R[i]);
+      if (this.n === this.buf.length) { this.port.postMessage(this.buf.slice()); this.n = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor('tap', Tap);`;
+
+async function ensureContext() {
+  if (ctx) return ctx;
+  ctx = new AudioContext({ latencyHint: 'interactive' });
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([workletSrc], { type: 'application/javascript' })));
+  worklet = new AudioWorkletNode(ctx, 'tap', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+  const sink = ctx.createGain(); sink.gain.value = 0; worklet.connect(sink).connect(ctx.destination);
+  worklet.port.onmessage = (e) => { if (analyzer && playing) for (const f of analyzer.process(e.data)) onFrame(f); };
+  rebuild();
+  return ctx;
+}
+
+function rebuild() {
+  if (!ctx) return;
+  analyzer = new AudioFrameAnalyzer(ctx.sampleRate, currentConfig());
+  history.length = 0;
+  resize();
+}
+
+function stopSource() {
+  if (sourceNode) { try { sourceNode.stop(); } catch {} sourceNode.disconnect(); sourceNode = null; }
+  if (mediaStream) { mediaStream.getTracks().forEach((t) => t.stop()); mediaStream = null; }
+  playing = false; btnPlay.setAttribute('aria-pressed', 'false'); btnPlay.textContent = 'Play';
+}
+
+function playBuffer(from) {
+  sourceNode = ctx.createBufferSource(); sourceNode.buffer = buffer;
+  sourceNode.connect(worklet); sourceNode.connect(ctx.destination);
+  sourceNode.onended = () => { if (playing && ctx.currentTime - startedAt + from >= buffer.duration - 0.05) { stopSource(); offset = 0; stateEl.textContent = 'Ended'; } };
+  sourceNode.start(0, from); startedAt = ctx.currentTime; offset = from;
+  playing = true; btnPlay.setAttribute('aria-pressed', 'true'); btnPlay.textContent = 'Pause';
+}
+
+async function loadBuffer(buf, label) {
+  await ensureContext(); stopSource(); buffer = buf; sourceKind = 'buffer'; offset = 0;
+  stateEl.textContent = label; btnPlay.disabled = false; rebuild(); await ctx.resume(); playBuffer(0);
+}
+
+document.getElementById('btnFile').addEventListener('click', () => document.getElementById('file').click());
+document.getElementById('file').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) openFile(f); });
+async function openFile(file) {
+  await ensureContext();
+  stateEl.textContent = 'Decoding…';
+  const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+  await loadBuffer(buf, file.name.replace(/\.[^.]+$/, ''));
+}
+document.body.addEventListener('dragover', (e) => { e.preventDefault(); document.body.classList.add('drop'); });
+document.body.addEventListener('dragleave', () => document.body.classList.remove('drop'));
+document.body.addEventListener('drop', (e) => { e.preventDefault(); document.body.classList.remove('drop'); const f = e.dataTransfer.files[0]; if (f) openFile(f); });
+
+document.getElementById('btnSynth').addEventListener('click', async () => {
+  await ensureContext();
+  const t = synthTrack({ sampleRate: ctx.sampleRate });
+  const buf = ctx.createBuffer(1, t.samples.length, ctx.sampleRate); buf.copyToChannel(t.samples, 0);
+  await loadBuffer(buf, 'Synthetic, 128 bpm');
+});
+
+document.getElementById('btnMic').addEventListener('click', async () => {
+  await ensureContext(); stopSource();
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch (err) { stateEl.textContent = `Mic refused: ${err.name}`; return; }
+  sourceNode = ctx.createMediaStreamSource(mediaStream); sourceNode.connect(worklet);
+  sourceKind = 'mic'; buffer = null; rebuild(); await ctx.resume();
+  playing = true; btnPlay.disabled = false; btnPlay.setAttribute('aria-pressed', 'true'); btnPlay.textContent = 'Stop';
+  stateEl.textContent = 'Listening';
+});
+
+btnPlay.addEventListener('click', togglePlay);
+function togglePlay() {
+  if (!ctx || (!buffer && sourceKind !== 'mic')) return;
+  if (sourceKind === 'mic') { stopSource(); stateEl.textContent = 'Stopped'; return; }
+  if (playing) { offset += ctx.currentTime - startedAt; stopSource(); stateEl.textContent = `Paused at ${offset.toFixed(1)} s`; }
+  else { ctx.resume(); playBuffer(offset % buffer.duration); stateEl.textContent = 'Playing'; }
+}
+window.addEventListener('keydown', (e) => { if (e.code === 'Space' && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)) { e.preventDefault(); togglePlay(); } });
+
+// ---- history + drawing -------------------------------------------------------------------
+const WINDOW_S = 8;
+const history = []; // frames, trimmed to WINDOW_S
+let latest = null, lastBeatT = -1;
+function onFrame(f) {
+  latest = f; history.push(f);
+  if (f.tempo.beat) lastBeatT = f.t;
+  while (history.length && history[0].t < f.t - WINDOW_S) history.shift();
+}
+
+const chart = document.getElementById('chart'), cx = chart.getContext('2d');
+const phaseC = document.getElementById('phase'), px = phaseC.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  const r = chart.parentElement.getBoundingClientRect();
+  W = Math.max(200, r.width); H = Math.max(200, r.height);
+  chart.width = W * dpr; chart.height = H * dpr; chart.style.width = `${W}px`; chart.style.height = `${H}px`;
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize); resize();
+
+const LO = 0.25, HI = 4;           // ratio axis, log scale
+const ratioY = (r, top, h) => top + h * (1 - (Math.log2(Math.max(LO, Math.min(HI, r))) - Math.log2(LO)) / (Math.log2(HI) - Math.log2(LO)));
+
+function drawChart() {
+  cx.clearRect(0, 0, W, H);
+  const lanes = analyzer ? [analyzer.config.all, ...analyzer.config.bands] : [DEFAULT_CONFIG.all, ...bandDefs];
+  const nameW = 64, nowW = 96, gap = 10;
+  const laneH = (H - gap * (lanes.length - 1)) / lanes.length;
+  const x0 = nameW, x1 = W - nowW - 12, span = x1 - x0;
+  const tNow = latest ? latest.t : 0;
+  cx.font = '600 13px "Instrument Sans", sans-serif'; cx.textBaseline = 'middle';
+
+  lanes.forEach((lane, li) => {
+    const top = li * (laneH + gap);
+    const y1 = ratioY(1, top, laneH);
+    // frame
+    cx.fillStyle = 'rgba(242,233,228,0.035)'; cx.fillRect(x0, top, span, laneH);
+    // baseline 1.0
+    cx.strokeStyle = 'rgba(255,180,84,0.55)'; cx.lineWidth = 1; cx.setLineDash([3, 5]);
+    cx.beginPath(); cx.moveTo(x0, y1 + 0.5); cx.lineTo(x1, y1 + 0.5); cx.stroke(); cx.setLineDash([]);
+    // name + range
+    cx.fillStyle = '#F2E9E4'; cx.textAlign = 'left'; cx.fillText(lane.name, 0, top + 12);
+    cx.fillStyle = '#8E8395'; cx.font = '400 11px "Instrument Sans", sans-serif';
+    cx.fillText(`${lane.lo}–${lane.hi >= 1000 ? (lane.hi / 1000) + 'k' : lane.hi}`, 0, top + 28);
+    cx.font = '600 13px "Instrument Sans", sans-serif';
+
+    if (history.length > 1) {
+      const get = (f) => (li === 0 ? f.all : f.bands[li - 1]);
+      const tx = (t) => x0 + span * (1 - (tNow - t) / WINDOW_S);
+      // level fill
+      cx.beginPath(); cx.moveTo(tx(history[0].t), y1);
+      for (const f of history) cx.lineTo(tx(f.t), ratioY(get(f).level, top, laneH));
+      cx.lineTo(tx(history[history.length - 1].t), y1); cx.closePath();
+      cx.fillStyle = 'rgba(242,233,228,0.16)'; cx.fill();
+      // att line
+      cx.beginPath();
+      history.forEach((f, i) => { const x = tx(f.t), y = ratioY(get(f).att, top, laneH); i ? cx.lineTo(x, y) : cx.moveTo(x, y); });
+      cx.strokeStyle = '#F2E9E4'; cx.lineWidth = 1.25; cx.stroke();
+      // presence, faint, on an absolute 0..1 axis
+      cx.beginPath();
+      history.forEach((f, i) => { const x = tx(f.t), y = top + laneH * (1 - get(f).presence); i ? cx.lineTo(x, y) : cx.moveTo(x, y); });
+      cx.strokeStyle = 'rgba(255,180,84,0.35)'; cx.lineWidth = 1; cx.stroke();
+      // hits
+      cx.strokeStyle = '#E8324A'; cx.lineWidth = 2;
+      for (const f of history) if (get(f).hit) { const x = tx(f.t); cx.beginPath(); cx.moveTo(x, top + laneH * 0.55); cx.lineTo(x, top + laneH); cx.stroke(); }
+    }
+
+    // now column: abs bar, hit pulse, time clock
+    if (latest) {
+      const b = li === 0 ? latest.all : latest.bands[li - 1];
+      const nx = x1 + 12;
+      cx.fillStyle = 'rgba(242,233,228,0.12)'; cx.fillRect(nx, top, 8, laneH);
+      cx.fillStyle = '#F2E9E4'; cx.fillRect(nx, top + laneH * (1 - b.abs), 8, laneH * b.abs);
+      // pulse disc
+      const r = 6 + 14 * b.hitPulse;
+      cx.beginPath(); cx.arc(nx + 36, top + laneH / 2, r, 0, Math.PI * 2);
+      cx.fillStyle = `rgba(232,50,74,${0.25 + 0.75 * b.hitPulse})`; cx.fill();
+      // time clock: one revolution per 2 s at rate 1
+      const cxp = nx + 74, cyp = top + laneH / 2, cr = Math.min(14, laneH / 2 - 2);
+      cx.beginPath(); cx.arc(cxp, cyp, cr, 0, Math.PI * 2); cx.strokeStyle = 'rgba(242,233,228,0.3)'; cx.lineWidth = 1; cx.stroke();
+      const a = (b.time / 2) * Math.PI * 2 - Math.PI / 2;
+      cx.beginPath(); cx.moveTo(cxp, cyp); cx.lineTo(cxp + cr * Math.cos(a), cyp + cr * Math.sin(a)); cx.strokeStyle = '#FFB454'; cx.lineWidth = 2; cx.stroke();
+      // numbers
+      cx.fillStyle = '#8E8395'; cx.font = '400 11px "Instrument Sans", sans-serif'; cx.textAlign = 'right';
+      cx.fillText(`${b.level.toFixed(2)}`, x1 - 4, top + 10);
+      cx.textAlign = 'left'; cx.font = '600 13px "Instrument Sans", sans-serif';
+    }
+  });
+}
+
+const bpmEl = document.getElementById('bpm'), confOut = document.getElementById('confOut'), confBar = document.getElementById('confBar');
+function drawTempo() {
+  const t = latest ? latest.tempo : { bpm: 0, confidence: 0, phase: 0, beat: false };
+  bpmEl.textContent = t.bpm ? t.bpm.toFixed(1) : '—';
+  confOut.textContent = t.confidence.toFixed(2); confBar.style.width = `${t.confidence * 100}%`;
+  const s = 104, c = s / 2, r = 40;
+  px.clearRect(0, 0, s, s);
+  px.beginPath(); px.arc(c, c, r, 0, Math.PI * 2); px.strokeStyle = 'rgba(242,233,228,0.25)'; px.lineWidth = 2; px.stroke();
+  if (t.bpm) {
+    const a = t.phase * Math.PI * 2 - Math.PI / 2;
+    px.beginPath(); px.arc(c + r * Math.cos(a), c + r * Math.sin(a), 6 + 6 * (1 - t.phase), 0, Math.PI * 2);
+    px.fillStyle = t.confidence > 0.5 ? '#FFB454' : '#8E8395'; px.fill();
+    const flash = Math.max(0, 1 - (latest.t - lastBeatT) / 0.15);
+    if (flash > 0) { px.beginPath(); px.arc(c, c, r * 0.5 * flash, 0, Math.PI * 2); px.fillStyle = `rgba(232,50,74,${flash})`; px.fill(); }
+  }
+}
+function loop() { drawChart(); drawTempo(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
