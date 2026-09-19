@@ -421,17 +421,16 @@ function engineBowl(W, H) {
         o = vec4(hn, hh.r, 0, 1); }`),
     show: program(NOISE + `uniform sampler2D uH; uniform vec2 texel; uniform float aspect, t, bass, loud, depth; uniform vec3 cDeep, cA, cB, cC, ground;
       void main(){
-        float L = texture(uH, v_uv - vec2(texel.x,0)).r, R = texture(uH, v_uv + vec2(texel.x,0)).r, B = texture(uH, v_uv - vec2(0,texel.y)).r, T = texture(uH, v_uv + vec2(0,texel.y)).r, C = texture(uH, v_uv).r;
-        vec3 n = normalize(vec3(-(R-L)*28.0, -(T-B)*28.0, 1.0));
+        vec2 e2 = texel * 2.0;
+        float L = texture(uH, v_uv - vec2(e2.x,0)).r, R = texture(uH, v_uv + vec2(e2.x,0)).r, B = texture(uH, v_uv - vec2(0,e2.y)).r, T = texture(uH, v_uv + vec2(0,e2.y)).r;
+        vec3 n = normalize(vec3(-(R-L)*14.0, -(T-B)*14.0, 1.0));
         vec2 ruv = v_uv + n.xy * depth;
         vec3 q = vec3(ruv * vec2(aspect, 1.0) * 2.2, t*0.07);
         float m1 = fbm(q), m2 = fbm(q + vec3(3.1, 1.7, 0.0) + m1*0.9);
         vec3 liquid = mix(cDeep, cA, smoothstep(0.25, 0.7, m1));
         liquid = mix(liquid, cB, smoothstep(0.55, 0.85, m2) * 0.8);
         liquid = mix(liquid, cC, smoothstep(0.6, 0.9, fbm(q*1.7 + 5.0)) * 0.5);
-        float lap = (L + R + B + T - 4.0*C);
-        float caustic = clamp(lap * 60.0, -0.6, 1.2);
-        liquid *= 1.0 + caustic * 0.9 + bass * 0.25;
+        liquid *= 1.0 + bass * 0.25;
         vec3 l = normalize(vec3(0.35, 0.55, 0.75));
         float spec = pow(max(dot(reflect(-l, n), vec3(0,0,1)), 0.0), 140.0);
         float fres = pow(1.0 - n.z, 2.5);
@@ -530,15 +529,14 @@ function engineHybrid(W, H) {
   const P = {
     show: program(`uniform sampler2D uH, uDye; uniform vec2 texel; uniform float aspect, t, bass, loud, depth, rim, glow; uniform vec3 ground, deep, cB;
       void main(){
-        float L = texture(uH, v_uv - vec2(texel.x,0)).r, R = texture(uH, v_uv + vec2(texel.x,0)).r, B = texture(uH, v_uv - vec2(0,texel.y)).r, T = texture(uH, v_uv + vec2(0,texel.y)).r, C = texture(uH, v_uv).r;
-        vec3 n = normalize(vec3(-(R-L)*28.0, -(T-B)*28.0, 1.0));
+        vec2 e2 = texel * 2.0;
+        float L = texture(uH, v_uv - vec2(e2.x,0)).r, R = texture(uH, v_uv + vec2(e2.x,0)).r, B = texture(uH, v_uv - vec2(0,e2.y)).r, T = texture(uH, v_uv + vec2(0,e2.y)).r;
+        vec3 n = normalize(vec3(-(R-L)*14.0, -(T-B)*14.0, 1.0));
         vec2 ruv = v_uv + n.xy * depth;
         vec3 dye = texture(uDye, ruv).rgb;
         dye = 1.0 - exp(-dye * (1.7 + glow));
-        float lap = (L + R + B + T - 4.0*C);
-        float caustic = clamp(lap * 60.0, -0.6, 1.2);
         vec3 col = deep + dye;
-        col *= 1.0 + caustic * 0.8 + bass * 0.15;
+        col *= 1.0 + bass * 0.15;
         vec3 l = normalize(vec3(0.35, 0.55, 0.75));
         float spec = pow(max(dot(reflect(-l, n), vec3(0,0,1)), 0.0), 140.0);
         float fres = pow(1.0 - n.z, 2.5);
