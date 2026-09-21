@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Wayfinder map
+    url: https://github.com/BlakePetersen/punch/issues/1
+    about: Where the project is going and what has already been decided.
