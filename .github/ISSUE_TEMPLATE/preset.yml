@@ -1,0 +1,36 @@
+name: Preset idea
+description: A look you'd like to see, or a preset you're working on
+labels: ["preset", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Finished presets go in as pull requests, one JSON file each. Use this for ideas, questions about tuning, or a look you can't get out of the current parameters. The preset schema is being settled on [#9](https://github.com/BlakePetersen/punch/issues/9).
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      options:
+        - Dye (ink in water)
+        - Bowl (wave surface over red depth)
+        - Punch (both composited)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: look
+    attributes:
+      label: The look
+      description: Describe it, or link a reference. What should it do on a kick, on a build, in silence?
+    validations:
+      required: true
+  - type: input
+    id: music
+    attributes:
+      label: Music it's tuned for
+      placeholder: "Techno around 130 bpm"
+  - type: textarea
+    id: blocker
+    attributes:
+      label: What's stopping you
+      description: A parameter that doesn't exist, a route that won't do what you want, or nothing at all.

@@ -1,0 +1,26 @@
+name: Feature request
+description: Something you wish Punch did
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [wayfinder map](https://github.com/BlakePetersen/punch/issues/1) first. If the idea is already decided or explicitly out of scope, comment there instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The situation, not the solution. What are you playing, where, and what would you like to see happen?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like Punch to do
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you've considered instead
+      description: Other visualizers that do this, or ways a preset could already cover it.

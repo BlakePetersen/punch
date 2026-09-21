@@ -1,0 +1,50 @@
+name: Bug report
+description: Something Punch does that it shouldn't
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: The shortest sequence that triggers it. Mention whether the screen saver was running for real or in the System Settings preview.
+      placeholder: |
+        1. Play a track in Apple Music
+        2. Wait for the screen saver
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.4"
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      placeholder: "MacBook Pro 14-inch, M3 Pro"
+    validations:
+      required: true
+  - type: input
+    id: audio
+    attributes:
+      label: What was playing, and from which app
+      placeholder: "Spotify, through the built-in speakers"
+  - type: input
+    id: version
+    attributes:
+      label: Punch version or commit
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screen recordings help more than screenshots for anything about motion. Console output from `/usr/bin/log stream --predicate 'subsystem contains "punch"'` helps for crashes.
