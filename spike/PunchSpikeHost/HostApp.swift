@@ -7,9 +7,14 @@ import AppKit
 final class HostApp: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
     private let status = NSTextField(wrappingLabelWithString: "idle")
+    private let groupStatus = NSTextField(wrappingLabelWithString: "group: idle")
     private lazy var probe = AudioTapProbe(role: "host") { [weak self] line in
         self?.status.stringValue = line
     }
+    private lazy var group = GroupProbe(role: "host") { [weak self] line in
+        self?.groupStatus.stringValue = "group: \(line)"
+    }
+    private var hue = 0
 
     static func main() {
         let app = NSApplication.shared
@@ -26,14 +31,19 @@ final class HostApp: NSObject, NSApplicationDelegate {
             NSButton(title: "Register extension", target: self, action: #selector(registerExtension)),
             NSButton(title: "Open Screen Saver settings", target: self, action: #selector(openSettings)),
         ])
+        let groupButtons = NSStackView(views: [
+            NSButton(title: "Write group setting", target: self, action: #selector(writeGroupSetting)),
+            NSButton(title: "Read group setting", target: self, action: #selector(readGroupSetting)),
+        ])
         status.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-        let stack = NSStackView(views: [buttons, status])
+        groupStatus.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        let stack = NSStackView(views: [buttons, status, groupButtons, groupStatus])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 200),
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 280),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -43,7 +53,16 @@ final class HostApp: NSObject, NSApplicationDelegate {
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
+        group.locate()
+        group.read(reason: "launch")
     }
+
+    @objc private func writeGroupSetting() {
+        hue += 1
+        group.write(hue: hue)
+    }
+
+    @objc private func readGroupSetting() { group.read(reason: "button") }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 

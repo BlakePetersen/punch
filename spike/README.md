@@ -75,6 +75,18 @@ Answers #2's open question: does the containing app's grant reach the embedded e
 2. In the app, click **Start host tap**. Allow the prompt. Confirm the app itself reaches `nonSilentAudio`.
 3. Trigger the screensaver again. Record whether it prompts separately, and its highest rung.
 
+## Run C — App Group sharing ([#8](https://github.com/BlakePetersen/punch/issues/8))
+
+Answers: can the sandboxed extension read a container the app writes, and does it notice changes while running?
+
+Both targets declare the App Group `<team id>.io.blakepetersen.punch.spike` (`PunchGroupID` in each Info.plist). The app writes a `hue` integer through `UserDefaults(suiteName:)` and to `settings.json` in the group container; the extension reads both on start and then watches three ways at once: KVO on the defaults key, a `DispatchSource` on the container directory, and a one-second poll.
+
+1. Open the app. The `group:` line shows the container path (`groupContainer`) and what is stored (`groupRead reason=launch`).
+2. Click **Write group setting** once or twice. Expect `groupWrite hue=n`.
+3. **Open Screen Saver settings** and select **Punch Spike**. The live preview's `group:` line should show `groupRead reason=observeStart defaults=n file=n`. A `file=error=…` there is the sandbox saying no.
+4. With the preview still visible, click **Write group setting** in the app. Watch which `groupLive mechanism=…` rungs land, and in what order: `kvo` and `dirwatch` mean push-style updates reach the extension, `poll` alone means it has to ask.
+5. Let the screensaver start for real and repeat step 4 while watching the log stream.
+
 ## Reading the result
 
 | Outcome | Meaning |
@@ -83,3 +95,6 @@ Answers #2's open question: does the containing app's grant reach the embedded e
 | run A silent, run B reaches `nonSilentAudio` | grants must come from the app — onboarding lives there |
 | both silent at `firstBuffer` | TCC denies screensaver extensions; fall back to app-captures / extension-renders |
 | never reaches `loadView` | a registration problem, not an audio one — check for duplicate `pluginkit` registrations before concluding anything |
+| run C `groupRead` shows values in the extension | decision 11 holds: settings can live in the App Group container |
+| run C `groupLive mechanism=kvo` or `dirwatch` in the extension | live updates work without polling |
+| run C `file=error=` in the extension | the sandbox blocks the container; fall back to Aerial's `/Users/Shared/` exception |

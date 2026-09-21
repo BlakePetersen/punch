@@ -33,6 +33,8 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).PunchSpikeSaverExtension</string>
 	</dict>
+	<key>PunchGroupID</key>
+	<string>DM6WN7M742.io.blakepetersen.punch.spike</string>
 	<key>SSEHasConfigureSheet</key>
 	<false/>
 	<key>SSENeedsAnimationTimer</key>
